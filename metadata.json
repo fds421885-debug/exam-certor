@@ -1,0 +1,6 @@
+{
+  "name": "معلم الاختبارات الذكي - AI Quiz & Google Workspace Manager",
+  "description": "منصة ذكية لإنشاء وإدارة الاختبارات التفاعلية باستخدام جيميناي وربطها مع Google Forms و Google Sheets و Google Drive",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
