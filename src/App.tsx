@@ -235,12 +235,11 @@ export default function App() {
     }
   };
 
-  const [createdFormModal, setCreatedFormModal] = useState<any>(null);
-
   const handleCreateGoogleForm = async (quiz: any) => {
     let currentToken = accessToken;
 
     if (!currentToken) {
+      // Prompt user to connect Google Account directly
       const confirmed = confirm('لإنشاء النموذج في Google Forms، يحتاج التطبيق إلى ربط حساب جوجل الخاص بك. هل تود ربط الحساب الآن؟');
       if (confirmed) {
         currentToken = await handleGoogleLogin();
@@ -277,57 +276,53 @@ export default function App() {
 
       const formData = await formCreateRes.json();
       const formId = formData.formId;
-      const formUrl = formData.responderUri || formData.uri || `https://docs.google.com/forms/d/${formId}/viewform`;
+      const formUrl = formData.responderUri || `https://docs.google.com/forms/d/${formId}/viewform`;
 
-      // 2. Add description and questions (wrapped in try/catch so form creation succeeds even if batch update has minor restriction)
+      // 2. Add description and questions
       if (quiz.questions && quiz.questions.length > 0) {
-        try {
-          const requests = [];
-          if (quiz.description) {
-            requests.push({
-              updateFormInfo: {
-                info: { description: quiz.description },
-                updateMask: 'description'
-              }
-            });
-          }
+        const requests = [];
+        if (quiz.description) {
+          requests.push({
+            updateFormInfo: {
+              info: { description: quiz.description },
+              updateMask: 'description'
+            }
+          });
+        }
 
-          quiz.questions.forEach((q: any, idx: number) => {
-            const options = q.options && q.options.length > 0 ? q.options : ['الخيار 1', 'الخيار 2', 'الخيار 3', 'الخيار 4'];
-            requests.push({
-              createItem: {
-                item: {
-                  title: `${idx + 1}. ${q.questionText}`,
-                  questionItem: {
-                    question: {
-                      required: true,
-                      choiceQuestion: {
-                        type: 'RADIO',
-                        options: options.map((opt: string) => ({ value: opt }))
-                      }
+        quiz.questions.forEach((q: any, idx: number) => {
+          const options = q.options && q.options.length > 0 ? q.options : ['الخيار 1', 'الخيار 2', 'الخيار 3', 'الخيار 4'];
+          requests.push({
+            createItem: {
+              item: {
+                title: `${idx + 1}. ${q.questionText}`,
+                questionItem: {
+                  question: {
+                    required: true,
+                    choiceQuestion: {
+                      type: 'RADIO',
+                      options: options.map((opt: string) => ({ value: opt }))
                     }
                   }
-                },
-                location: { index: idx }
-              }
-            });
+                }
+              },
+              location: { index: idx }
+            }
           });
+        });
 
-          await fetch(`https://forms.googleapis.com/v1/forms/${formId}:batchUpdate`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${currentToken}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({ requests })
-          });
-        } catch (updateErr) {
-          console.error('Batch update questions warning:', updateErr);
-        }
+        await fetch(`https://forms.googleapis.com/v1/forms/${formId}:batchUpdate`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${currentToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ requests })
+        });
       }
 
       // 3. Save to database
-      await fetch('/api/tests', {
+      const saveRes = await fetch('/api/tests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -340,13 +335,14 @@ export default function App() {
         })
       });
 
-      fetchTests();
-      setPendingQuiz(null);
-      setCreatedFormModal({
-        title: quiz.title,
-        formUrl,
-        formId
-      });
+      if (saveRes.ok) {
+        alert('🎉 تم إنشاء نموذج Google Form وحفظ الاختبار بنجاح!');
+        fetchTests();
+        setActiveTab('tests');
+        setPendingQuiz(null);
+      } else {
+        throw new Error('فشل حفظ الاختبار في قاعدة البيانات');
+      }
 
     } catch (err: any) {
       console.error('Create Google Form error:', err);
@@ -1172,45 +1168,6 @@ export default function App() {
                 className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl text-sm font-black shadow-lg border-b-4 border-indigo-900 active:border-b-0 active:translate-y-1 transition-all cursor-pointer"
               >
                 حفظ التعديلات
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* Success Modal with Form Link */}
-      {createdFormModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full p-8 shadow-2xl space-y-6 border-4 border-emerald-100 text-center">
-            <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-inner">
-              <CheckCircle2 className="w-10 h-10" />
-            </div>
-            <div>
-              <h3 className="font-black text-slate-900 text-2xl mb-2">🎉 تم إنشاء نموذج Google Form بنجاح!</h3>
-              <p className="text-slate-600 text-sm font-medium">الاختبار "{createdFormModal.title}" أصبح جاهزاً الآن على حسابك في Google Forms.</p>
-            </div>
-
-            <div className="bg-slate-50 border-2 border-slate-200 rounded-2xl p-4 text-xs font-mono break-all text-slate-700 font-bold select-all">
-              {createdFormModal.formUrl}
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-3 pt-2">
-              <a
-                href={createdFormModal.formUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black py-3.5 px-4 rounded-2xl text-sm shadow-lg border-b-4 border-emerald-900 active:border-b-0 active:translate-y-1 transition-all flex items-center justify-center gap-2"
-              >
-                <ExternalLink className="w-5 h-5" />
-                فتح النموذج الآن في Google Forms
-              </a>
-              <button
-                onClick={() => {
-                  setCreatedFormModal(null);
-                  setActiveTab('tests');
-                }}
-                className="px-6 py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-2xl text-sm font-black transition-all cursor-pointer"
-              >
-                إغلاق والذهاب للاختبارات
               </button>
             </div>
           </div>
